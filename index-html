@@ -1,0 +1,2209 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PaperPin 4K — Dynamic Wallpaper Platform & Email Sharing</title>
+  
+  <!-- Google Fonts: Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#fff1f2',
+              100: '#ffe4e6',
+              500: '#e60023', // Pinterest signature red
+              600: '#cc001f',
+              700: '#ad001a',
+            }
+          },
+          animation: {
+            'fade-in': 'fadeIn 0.25s ease-out forwards',
+            'scale-up': 'scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+            'heart-pop': 'heartPop 0.4s cubic-bezier(0.17, 0.89, 0.32, 1.49) forwards',
+            'toast-slide': 'toastSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+            'pulse-subtle': 'pulseSubtle 3s infinite ease-in-out',
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0' },
+              '100%': { opacity: '1' },
+            },
+            scaleUp: {
+              '0%': { opacity: '0', transform: 'scale(0.95)' },
+              '100%': { opacity: '1', transform: 'scale(1)' },
+            },
+            heartPop: {
+              '0%': { transform: 'scale(1)' },
+              '50%': { transform: 'scale(1.35)' },
+              '100%': { transform: 'scale(1)' },
+            },
+            toastSlide: {
+              '0%': { opacity: '0', transform: 'translateY(20px) scale(0.95)' },
+              '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+            },
+            pulseSubtle: {
+              '0%, 100%': { opacity: '1' },
+              '50%': { opacity: '0.85' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Canvas Confetti for interactions -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <!-- React & ReactDOM CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Babel Compiler CDN -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(156, 163, 175, 0.3);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(156, 163, 175, 0.5);
+    }
+    
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .dark .glass-panel {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    .glass-pill {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(10px);
+    }
+    .dark .glass-pill {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(10px);
+    }
+
+    .masonry-columns {
+      column-gap: 1.25rem;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen font-sans antialiased selection:bg-brand-500 selection:text-white transition-colors duration-200">
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // Curated high-res Unsplash photo IDs paired with tags and resolutions for initial seed
+    const UNSPLASH_PHOTO_SEED = [
+      { id: '1514565131-fce0801e5785', title: 'Cyberpunk Neon Metropolis 2077', category: 'Cyberpunk', aspectRatio: 'tall', aspectLabel: '9:16 Mobile', resolution: '4K Ultra', palette: ['#0f172a', '#ec4899', '#3b82f6', '#06b6d4'], tags: ['cyberpunk', 'neon', 'city', 'night', 'futuristic'] },
+      { id: '1519681393784-d120267933ba', title: 'Crimson Dawn Alpine Peaks', category: 'Minimal', aspectRatio: 'square', aspectLabel: '1:1 Square', resolution: '8K Ultra', palette: ['#18181b', '#dc2626', '#f87171', '#fef2f2'], tags: ['minimal', 'mountains', 'red', 'sunset', 'snow'] },
+      { id: '1506703719100-a0f3a48c0f86', title: 'Deep Space Cosmic Galaxy Rift', category: 'Space', aspectRatio: 'extra-tall', aspectLabel: '9:20 OLED Vertical', resolution: '4K OLED', palette: ['#09090b', '#581c87', '#3b82f6', '#ec4899'], tags: ['space', 'nebula', 'galaxy', 'stars', 'oled'] },
+      { id: '1503899036084-c55cdd92da26', title: 'Rainy Night Tokyo Lantern Alley', category: 'Anime', aspectRatio: 'tall', aspectLabel: '3:4 Portrait', resolution: '4K Ultra', palette: ['#020617', '#0284c7', '#f43f5e', '#38bdf8'], tags: ['anime', 'japan', 'tokyo', 'rain', 'street'] },
+      { id: '1618005182384-a83a8bd57fbe', title: 'Iridescent Abstract Liquid Waves', category: 'Abstract', aspectRatio: 'wide', aspectLabel: '16:9 Desktop', resolution: '8K Ultra', palette: ['#0f172a', '#6366f1', '#a855f7', '#ec4899'], tags: ['abstract', 'fluid', '3d', 'gradient', 'waves'] },
+      { id: '1448375240586-882707db888b', title: 'Emerald Mist Pine Forest Canopy', category: 'Nature', aspectRatio: 'tall', aspectLabel: '9:16 Portrait', resolution: '4K Ultra', palette: ['#022c22', '#065f46', '#10b981', '#a7f3d0'], tags: ['nature', 'forest', 'mist', 'trees', 'green'] },
+      { id: '1513694203232-719a280e022f', title: 'Brutalist Monolithic Geometric Atrium', category: 'Architecture', aspectRatio: 'square', aspectLabel: '1:1 Square', resolution: '4K Ultra', palette: ['#18181b', '#3f3f46', '#71717a', '#e4e4e7'], tags: ['architecture', 'monochrome', 'concrete', 'minimal'] },
+      { id: '1544551763-46a013bb70d5', title: 'Bioluminescent Abyss Ocean Jellyfish', category: 'AMOLED', aspectRatio: 'extra-tall', aspectLabel: '9:19 Vertical', resolution: '4K OLED', palette: ['#030712', '#0f172a', '#06b6d4', '#22d3ee'], tags: ['amoled', 'dark', 'ocean', 'jellyfish', 'glowing'] },
+      { id: '1509316975850-ff9c5deb0cd9', title: 'Sahara Golden Dunes Horizon', category: 'Nature', aspectRatio: 'ultrawide', aspectLabel: '21:9 Ultrawide', resolution: '8K Ultra', palette: ['#451a03', '#78350f', '#f59e0b', '#fde68a'], tags: ['desert', 'dunes', 'golden hour', 'nature', 'warm'] },
+      { id: '1550684848-fac1c5b4e853', title: 'Synthwave Sunset Highway 80s', category: 'Cyberpunk', aspectRatio: 'tall', aspectLabel: '9:16 Mobile', resolution: '4K Ultra', palette: ['#1e1b4b', '#4338ca', '#d946ef', '#fbbf24'], tags: ['synthwave', 'retro', 'cyberpunk', 'purple', 'neon'] },
+      { id: '1522383225653-ed111181a951', title: 'Spring Sakura Blossom Petal Stream', category: 'Anime', aspectRatio: 'tall', aspectLabel: '9:16 Portrait', resolution: '4K Ultra', palette: ['#4c0519', '#881337', '#f43f5e', '#fff1f2'], tags: ['anime', 'sakura', 'pink', 'spring', 'blossom'] },
+      { id: '1502134249126-9f3755a50d78', title: 'Supernova Hyperdrive Quantum Portal', category: 'Space', aspectRatio: 'tall', aspectLabel: '9:16 Mobile', resolution: '4K OLED', palette: ['#09090b', '#4c1d95', '#831843', '#06b6d4'], tags: ['space', 'cosmic', 'portal', 'purple', 'vibrant'] },
+      { id: '1541701494587-cb58502866ab', title: 'Minimalist Indigo Silk Curves', category: 'Minimal', aspectRatio: 'extra-tall', aspectLabel: '9:18 Vertical', resolution: '4K Ultra', palette: ['#1e1b4b', '#312e81', '#6366f1', '#e0e7ff'], tags: ['minimal', 'silk', 'indigo', 'smooth', 'modern'] },
+      { id: '1578632767115-351597cf2477', title: 'Cyber Samurai Crimson Shadow', category: 'Gaming', aspectRatio: 'tall', aspectLabel: '9:16 Mobile', resolution: '4K Ultra', palette: ['#09090b', '#7f1d1d', '#ef4444', '#fca5a5'], tags: ['gaming', 'samurai', 'red', 'dark', 'anime'] },
+      { id: '1563720223185-11003d516935', title: 'Hypercar Matte Black Midnight Drift', category: 'Cars', aspectRatio: 'ultrawide', aspectLabel: '21:9 Ultrawide', resolution: '8K Ultra', palette: ['#09090b', '#18181b', '#3f3f46', '#9ca3af'], tags: ['cars', 'supercar', 'dark', 'speed', 'black'] },
+      { id: '1518709268805-4e9042af9f23', title: 'Enchanted Crystal Citadel Kingdom', category: 'Fantasy', aspectRatio: 'tall', aspectLabel: '9:16 Mobile', resolution: '4K Ultra', palette: ['#0f172a', '#1e1b4b', '#818cf8', '#c084fc'], tags: ['fantasy', 'castle', 'magic', 'crystal', 'glowing'] },
+      { id: '1511512578047-dfb367046420', title: 'Retro Arcade Cyber Deck Setup', category: 'Gaming', aspectRatio: 'wide', aspectLabel: '16:9 Desktop', resolution: '4K Ultra', palette: ['#09090b', '#581c87', '#ec4899', '#38bdf8'], tags: ['gaming', 'setup', 'rgb', 'arcade', 'retro'] },
+      { id: '1507525428034-b723cf961d3e', title: 'Tropical Turquoise Ocean Wave Crest', category: 'Nature', aspectRatio: 'wide', aspectLabel: '16:9 Desktop', resolution: '8K Ultra', palette: ['#042f2e', '#0f766e', '#14b8a6', '#99f6e4'], tags: ['nature', 'ocean', 'wave', 'blue', 'summer'] }
+    ];
+
+    // Helper to format Unsplash URLs with dynamic parameters
+    const getUnsplashUrl = (photoId, width = 800, quality = 80) => {
+      return `https://images.unsplash.com/photo-${photoId}?auto=format&fit=crop&w=${width}&q=${quality}`;
+    };
+
+    // Dynamic generator that creates dynamic wallpaper records for search queries
+    const generateDynamicWallpapersForQuery = (query, count = 12) => {
+      const categories = ['Cyberpunk', 'Anime', 'Space', 'Nature', 'AMOLED', 'Minimal', 'Cars', 'Gaming', 'Fantasy', 'Architecture', 'Abstract'];
+      const aspectRatios = ['tall', 'extra-tall', 'square', 'wide', 'ultrawide'];
+      const resolutions = ['4K Ultra', '8K Ultra', '4K OLED', 'HD Desktop'];
+
+      // Deterministic sample photo IDs from Unsplash high quality collection
+      const photoPool = [
+        '1514565131-fce0801e5785', '1519681393784-d120267933ba', '1506703719100-a0f3a48c0f86',
+        '1503899036084-c55cdd92da26', '1618005182384-a83a8bd57fbe', '1448375240586-882707db888b',
+        '1513694203232-719a280e022f', '1544551763-46a013bb70d5', '1509316975850-ff9c5deb0cd9',
+        '1550684848-fac1c5b4e853', '1522383225653-ed111181a951', '1502134249126-9f3755a50d78',
+        '1541701494587-cb58502866ab', '1578632767115-351597cf2477', '1563720223185-11003d516935',
+        '1518709268805-4e9042af9f23', '1511512578047-dfb367046420', '1507525428034-b723cf961d3e'
+      ];
+
+      const capitalizedQuery = query.charAt(0).toUpperCase() + query.slice(1);
+
+      return Array.from({ length: count }, (_, idx) => {
+        const photoId = photoPool[idx % photoPool.length];
+        const aspect = aspectRatios[idx % aspectRatios.length];
+        const res = resolutions[idx % resolutions.length];
+        const categoryMatch = categories.find(c => c.toLowerCase() === query.toLowerCase()) || categories[idx % categories.length];
+
+        return {
+          id: `dyn-${query.toLowerCase().replace(/\s+/g, '-')}-${idx + 1}`,
+          title: `${capitalizedQuery} ${idx === 0 ? 'Masterpiece' : 'Wallpaper'} #${idx + 1}`,
+          category: categoryMatch,
+          aspectRatio: aspect,
+          aspectLabel: aspect === 'tall' ? '9:16 Mobile' : aspect === 'extra-tall' ? '9:20 OLED' : aspect === 'square' ? '1:1 Square' : aspect === 'ultrawide' ? '21:9 Ultrawide' : '16:9 Desktop',
+          resolution: res,
+          imageUrl: getUnsplashUrl(photoId, 900, 85),
+          creator: {
+            name: ['Aria Vance', 'Kaito Takahashi', 'Elena Rostova', 'Nova Koster', 'Lucas Sterling', 'Sven Lindqvist'][idx % 6],
+            avatar: `https://images.unsplash.com/photo-${['1534528741775-53994a69daeb', '1500648767791-00dcc994a43e', '1494790108377-be9c29b29330', '1517841905240-472988babdf9', '1507003211169-0a1dd7228f2d', '1522075469751-3a6694fb2f61'][idx % 6]}?auto=format&fit=crop&w=120&q=80`,
+            handle: `@creator_${idx + 1}`
+          },
+          likes: Math.floor(1200 + (idx * 340) + Math.random() * 500),
+          downloads: Math.floor(800 + (idx * 210) + Math.random() * 300),
+          createdAt: '2026-09-28',
+          palette: ['#0f172a', '#e60023', '#3b82f6', '#10b981', '#f59e0b'],
+          tags: [query.toLowerCase(), categoryMatch.toLowerCase(), '4k', 'wallpaper', 'hd']
+        };
+      });
+    };
+
+    const CATEGORIES = [
+      'All', 'Cyberpunk', 'Anime', 'Space', 'Nature', 'AMOLED', 
+      'Minimal', 'Cars', 'Gaming', 'Fantasy', 'Architecture', 'Abstract'
+    ];
+
+    const ASPECT_RATIOS = [
+      { key: 'all', label: 'All Ratios', icon: 'grid' },
+      { key: 'tall', label: 'Mobile (9:16)', icon: 'smartphone' },
+      { key: 'wide', label: 'Desktop (16:9)', icon: 'monitor' },
+      { key: 'ultrawide', label: 'Ultrawide (21:9)', icon: 'tv' },
+      { key: 'square', label: 'Square (1:1)', icon: 'square' },
+    ];
+
+    const COLOR_PALETTES = [
+      { name: 'All Colors', hex: null },
+      { name: 'Crimson Red', hex: '#ef4444' },
+      { name: 'Neon Pink', hex: '#ec4899' },
+      { name: 'Cyber Purple', hex: '#a855f7' },
+      { name: 'Ocean Blue', hex: '#3b82f6' },
+      { name: 'Emerald Green', hex: '#10b981' },
+      { name: 'Golden Amber', hex: '#f59e0b' },
+      { name: 'AMOLED Black', hex: '#000000' }
+    ];
+
+    const INITIAL_BOARDS = ['Favorites', 'Cyberpunk Vibes', 'Minimal Desktop', 'Nature & Escape', 'AMOLED Wallpapers'];
+
+    const Icon = ({ name, className = "w-5 h-5" }) => {
+      useEffect(() => {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      }, [name]);
+      return <i data-lucide={name} className={className}></i>;
+    };
+
+    const ToastContainer = ({ toasts, removeToast }) => {
+      return (
+        <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none">
+          {toasts.map(toast => (
+            <div 
+              key={toast.id}
+              className="pointer-events-auto flex items-center gap-3 bg-slate-900/95 dark:bg-slate-800/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-slate-700/60 backdrop-blur-md animate-toast-slide max-w-sm"
+            >
+              <div className={`p-2 rounded-xl shrink-0 ${
+                toast.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 
+                toast.type === 'email' ? 'bg-sky-500/20 text-sky-400' : 
+                'bg-brand-500/20 text-brand-400'
+              }`}>
+                <Icon name={toast.icon || 'info'} className="w-5 h-5" />
+              </div>
+              <div className="flex-1 text-sm min-w-0">
+                <p className="font-semibold text-slate-100 truncate">{toast.title}</p>
+                {toast.message && <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{toast.message}</p>}
+              </div>
+              <button 
+                onClick={() => removeToast(toast.id)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+              >
+                <Icon name="x" className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      );
+    };
+
+    const Navbar = ({ 
+      searchQuery, 
+      setSearchQuery, 
+      activeTab, 
+      setActiveTab, 
+      onOpenUpload, 
+      onOpenAccountModal,
+      onOpenNewsletterModal,
+      darkMode, 
+      setDarkMode,
+      savedCount,
+      userEmail
+    }) => {
+      const searchInputRef = useRef(null);
+
+      useEffect(() => {
+        const handleKeyDown = (e) => {
+          if (e.key === '/' && document.activeElement !== searchInputRef.current && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+            e.preventDefault();
+            searchInputRef.current?.focus();
+          } else if (e.key === 'Escape' && document.activeElement === searchInputRef.current) {
+            setSearchQuery('');
+            searchInputRef.current?.blur();
+          }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+      }, [setSearchQuery]);
+
+      return (
+        <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-200/60 dark:border-slate-800/60 transition-colors">
+          <div className="max-w-[1700px] mx-auto px-4 sm:px-6 h-18 flex items-center justify-between gap-3 sm:gap-6 py-3">
+            
+            {/* Brand Logo */}
+            <div className="flex items-center gap-4 sm:gap-6">
+              <button 
+                onClick={() => { setActiveTab('explore'); setSearchQuery(''); }} 
+                className="flex items-center gap-2.5 group focus:outline-none"
+              >
+                <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center text-white shadow-lg shadow-brand-500/30 group-hover:scale-105 transition-transform">
+                  <Icon name="pin" className="w-5 h-5 fill-current" />
+                </div>
+                <div className="hidden sm:flex flex-col text-left">
+                  <span className="font-extrabold text-xl tracking-tight leading-none text-slate-900 dark:text-white">
+                    Paper<span className="text-brand-500">Pin</span> <span className="text-xs px-1.5 py-0.5 rounded-full bg-brand-500/10 text-brand-500 font-bold ml-1">4K</span>
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-400">Million Wallpapers Engine</span>
+                </div>
+              </button>
+
+              {/* Navigation Tabs */}
+              <nav className="hidden lg:flex items-center gap-1 bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-full text-xs font-semibold">
+                <button
+                  onClick={() => setActiveTab('explore')}
+                  className={`px-4 py-2 rounded-full transition-all ${
+                    activeTab === 'explore' 
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm' 
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  Explore 4K
+                </button>
+                <button
+                  onClick={() => setActiveTab('trending')}
+                  className={`px-4 py-2 rounded-full transition-all flex items-center gap-1.5 ${
+                    activeTab === 'trending' 
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm' 
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Icon name="flame" className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                  Trending
+                </button>
+                <button
+                  onClick={() => setActiveTab('saved')}
+                  className={`px-4 py-2 rounded-full transition-all flex items-center gap-1.5 ${
+                    activeTab === 'saved' 
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm' 
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  Saved Boards
+                  {savedCount > 0 && (
+                    <span className="bg-brand-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                      {savedCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('email-hub')}
+                  className={`px-4 py-2 rounded-full transition-all flex items-center gap-1.5 ${
+                    activeTab === 'email-hub' 
+                      ? 'bg-brand-500 text-white shadow-sm' 
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Icon name="mail" className="w-3.5 h-3.5" />
+                  Email Hub
+                </button>
+              </nav>
+            </div>
+
+            {/* Dynamic Search Engine Input Bar */}
+            <div className="flex-1 max-w-xl relative">
+              <div className="relative flex items-center">
+                <div className="absolute left-3.5 text-slate-400 pointer-events-none">
+                  <Icon name="search" className="w-4 h-4" />
+                </div>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search millions of 4K wallpapers (e.g. Cyberpunk, Ferrari, Galaxy, Anime)..."
+                  className="w-full pl-10 pr-12 py-2.5 bg-slate-200/60 dark:bg-slate-800/80 border border-transparent focus:border-brand-500/50 rounded-full text-xs sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10 transition-all"
+                />
+                {searchQuery ? (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-full"
+                  >
+                    <Icon name="x" className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <div className="absolute right-3.5 hidden sm:flex items-center text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-300/50 dark:bg-slate-700/50 px-2 py-0.5 rounded-md">
+                    /
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right Action Bar */}
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              {/* Daily Email Newsletter Digest Button */}
+              <button
+                onClick={onOpenNewsletterModal}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-200/70 dark:bg-slate-800/80 hover:bg-slate-300 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors"
+                title="Daily Email Digest"
+              >
+                <Icon name="bell" className="w-3.5 h-3.5 text-amber-500" />
+                <span>Daily Digest</span>
+              </button>
+
+              {/* Upload Pin Button */}
+              <button
+                onClick={onOpenUpload}
+                className="flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 text-white font-semibold text-xs sm:text-sm px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full shadow-lg shadow-brand-500/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <Icon name="plus" className="w-4 h-4" />
+                <span className="hidden sm:inline">Upload</span>
+              </button>
+
+              {/* Theme Toggle */}
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 sm:p-2.5 rounded-full bg-slate-200/60 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
+                title={darkMode ? "Light Mode" : "Dark Mode"}
+              >
+                <Icon name={darkMode ? "sun" : "moon"} className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+
+              {/* Email Account Avatar & Login */}
+              <button
+                onClick={onOpenAccountModal}
+                className="flex items-center gap-2 p-1 pl-1 pr-2.5 rounded-full bg-slate-200/50 dark:bg-slate-800/50 hover:bg-slate-300/70 dark:hover:bg-slate-700/70 border border-slate-300/40 dark:border-slate-700/40 transition-colors"
+                title="Account Settings"
+              >
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-500 to-amber-500 flex items-center justify-center text-white text-xs font-extrabold shadow-sm">
+                  {userEmail ? userEmail.charAt(0).toUpperCase() : <Icon name="user" className="w-4 h-4" />}
+                </div>
+                <span className="text-xs font-semibold max-w-[100px] truncate hidden xl:inline text-slate-800 dark:text-slate-200">
+                  {userEmail || 'Sign In'}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile Bottom Navigation Bar */}
+          <div className="flex lg:hidden border-t border-slate-200/50 dark:border-slate-800/50 px-3 py-2 justify-around text-xs font-semibold">
+            <button
+              onClick={() => setActiveTab('explore')}
+              className={`py-1 px-3 rounded-full ${activeTab === 'explore' ? 'bg-brand-500 text-white' : 'text-slate-600 dark:text-slate-400'}`}
+            >
+              Explore
+            </button>
+            <button
+              onClick={() => setActiveTab('trending')}
+              className={`py-1 px-3 rounded-full ${activeTab === 'trending' ? 'bg-brand-500 text-white' : 'text-slate-600 dark:text-slate-400'}`}
+            >
+              Trending
+            </button>
+            <button
+              onClick={() => setActiveTab('saved')}
+              className={`py-1 px-3 rounded-full ${activeTab === 'saved' ? 'bg-brand-500 text-white' : 'text-slate-600 dark:text-slate-400'}`}
+            >
+              Saved ({savedCount})
+            </button>
+            <button
+              onClick={() => setActiveTab('email-hub')}
+              className={`py-1 px-3 rounded-full ${activeTab === 'email-hub' ? 'bg-brand-500 text-white' : 'text-slate-600 dark:text-slate-400'}`}
+            >
+              Email Hub
+            </button>
+          </div>
+        </header>
+      );
+    };
+
+    const CategoryAndFilterBar = ({ 
+      categories, 
+      selectedCategory, 
+      setSelectedCategory,
+      selectedAspect,
+      setSelectedAspect,
+      selectedPalette,
+      setSelectedPalette
+    }) => {
+      const scrollRef = useRef(null);
+      const [showFilters, setShowFilters] = useState(false);
+
+      const scroll = (direction) => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollBy({ left: direction === 'left' ? -250 : 250, behavior: 'smooth' });
+        }
+      };
+
+      return (
+        <div className="max-w-[1700px] mx-auto px-4 sm:px-6 my-4">
+          <div className="flex flex-col gap-3">
+            
+            {/* Category horizontal track with scroll buttons */}
+            <div className="relative group flex items-center gap-2">
+              <button 
+                onClick={() => scroll('left')}
+                className="absolute left-1 z-10 w-8 h-8 rounded-full bg-slate-900/80 text-white dark:bg-white/80 dark:text-slate-900 shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
+              >
+                <Icon name="chevron-left" className="w-4 h-4" />
+              </button>
+
+              <div 
+                ref={scrollRef}
+                className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 scroll-smooth flex-1"
+              >
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-4 py-2 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-200 ${
+                      selectedCategory === cat
+                        ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-md scale-[1.02]'
+                        : 'bg-slate-200/70 hover:bg-slate-300/80 dark:bg-slate-800/70 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              <button 
+                onClick={() => scroll('right')}
+                className="absolute right-1 z-10 w-8 h-8 rounded-full bg-slate-900/80 text-white dark:bg-white/80 dark:text-slate-900 shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
+              >
+                <Icon name="chevron-right" className="w-4 h-4" />
+              </button>
+
+              {/* Filters Toggle Button */}
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all shrink-0 ${
+                  showFilters || selectedAspect !== 'all' || selectedPalette
+                    ? 'bg-brand-500 text-white shadow-md'
+                    : 'bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300'
+                }`}
+              >
+                <Icon name="sliders" className="w-3.5 h-3.5" />
+                <span>Filters</span>
+                {(selectedAspect !== 'all' || selectedPalette) && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                )}
+              </button>
+            </div>
+
+            {/* Expandable Filter Controls Drawer */}
+            {showFilters && (
+              <div className="p-4 rounded-2xl bg-slate-200/60 dark:bg-slate-900/80 border border-slate-300/60 dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
+                
+                {/* Aspect Ratio Filter */}
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">
+                    Aspect Ratio Filter
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ASPECT_RATIOS.map((ratio) => (
+                      <button
+                        key={ratio.key}
+                        onClick={() => setSelectedAspect(ratio.key)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                          selectedAspect === ratio.key
+                            ? 'bg-brand-500 text-white'
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Icon name={ratio.icon} className="w-3.5 h-3.5" />
+                        <span>{ratio.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Color Palette Filter */}
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">
+                    Color Spectrum Filter
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {COLOR_PALETTES.map((palette) => (
+                      <button
+                        key={palette.name}
+                        onClick={() => setSelectedPalette(selectedPalette === palette.hex ? null : palette.hex)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 border transition-all ${
+                          selectedPalette === palette.hex
+                            ? 'border-brand-500 bg-brand-500/10 text-brand-500 font-bold'
+                            : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        {palette.hex ? (
+                          <span className="w-3 h-3 rounded-full border border-black/20" style={{ backgroundColor: palette.hex }}></span>
+                        ) : (
+                          <Icon name="palette" className="w-3.5 h-3.5" />
+                        )}
+                        <span>{palette.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+          </div>
+        </div>
+      );
+    };
+
+    const WallpaperCard = ({ 
+      wallpaper, 
+      onSelect, 
+      onSavePin, 
+      isSaved, 
+      savedBoard,
+      onToggleLike, 
+      isLiked,
+      onQuickDownload,
+      onOpenSendEmailModal,
+      userBoards
+    }) => {
+      const [showBoardDropdown, setShowBoardDropdown] = useState(false);
+      const dropdownRef = useRef(null);
+
+      useEffect(() => {
+        const handleClickOutside = (e) => {
+          if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+            setShowBoardDropdown(false);
+          }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+      }, []);
+
+      const getAspectClass = (aspect) => {
+        switch(aspect) {
+          case 'tall': return 'aspect-[3/4]';
+          case 'extra-tall': return 'aspect-[9/16]';
+          case 'square': return 'aspect-square';
+          case 'wide': return 'aspect-[16/9]';
+          case 'ultrawide': return 'aspect-[21/9]';
+          default: return 'aspect-[3/4]';
+        }
+      };
+
+      return (
+        <div 
+          className="break-inside-avoid mb-5 rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-300 group relative bg-slate-200 dark:bg-slate-800/80 border border-slate-200/50 dark:border-slate-800 cursor-pointer transform hover:-translate-y-1"
+          onClick={() => onSelect(wallpaper)}
+        >
+          {/* Wallpaper Media */}
+          <div className={`w-full overflow-hidden relative ${getAspectClass(wallpaper.aspectRatio)}`}>
+            <img
+              src={wallpaper.imageUrl}
+              alt={wallpaper.title}
+              loading="lazy"
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+
+            {/* Top Resolution Badge */}
+            <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5">
+              <span className="glass-pill px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider text-slate-900 dark:text-slate-100 border border-white/20 shadow-sm">
+                {wallpaper.resolution}
+              </span>
+            </div>
+
+            {/* Top Right Pin & Board Overlay */}
+            <div 
+              ref={dropdownRef}
+              className="absolute top-3 right-3 z-20 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {isSaved ? (
+                <button
+                  onClick={() => onSavePin(wallpaper.id, null)}
+                  className="bg-slate-900/90 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg transition-colors flex items-center gap-1"
+                >
+                  <Icon name="check" className="w-3.5 h-3.5" />
+                  Saved
+                </button>
+              ) : (
+                <div className="relative">
+                  <button
+                    onClick={() => onSavePin(wallpaper.id, 'Favorites')}
+                    className="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shadow-lg transition-transform active:scale-95 flex items-center gap-1"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setShowBoardDropdown(!showBoardDropdown)}
+                    className="bg-brand-600 hover:bg-brand-700 text-white p-1.5 rounded-full shadow-lg ml-1 transition-transform active:scale-95"
+                  >
+                    <Icon name="chevron-down" className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Board Selection Dropdown */}
+                  {showBoardDropdown && (
+                    <div className="absolute right-0 mt-2 w-44 bg-slate-900/95 text-white rounded-xl shadow-2xl border border-slate-700/60 p-1 z-30 backdrop-blur-md animate-fade-in">
+                      <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Save to board
+                      </div>
+                      {userBoards.map(board => (
+                        <button
+                          key={board}
+                          onClick={() => {
+                            onSavePin(wallpaper.id, board);
+                            setShowBoardDropdown(false);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-brand-500 text-slate-200 hover:text-white transition-colors flex items-center justify-between"
+                        >
+                          <span className="truncate">{board}</span>
+                          {savedBoard === board && <Icon name="check" className="w-3 h-3 text-brand-300" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Floating Control Bar */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3 pointer-events-none">
+              
+              <div className="flex items-center justify-between text-white pointer-events-auto">
+                
+                {/* Creator Avatar & Name */}
+                <div className="flex items-center gap-2 min-w-0 pr-2">
+                  <img
+                    src={wallpaper.creator.avatar}
+                    alt={wallpaper.creator.name}
+                    className="w-7 h-7 rounded-full object-cover ring-1 ring-white/50 shrink-0"
+                  />
+                  <span className="text-xs font-semibold truncate text-white/95 drop-shadow-sm">
+                    {wallpaper.creator.name}
+                  </span>
+                </div>
+
+                {/* Quick Actions (Email, Like, Download) */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Send to Email Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenSendEmailModal(wallpaper);
+                    }}
+                    className="p-2 rounded-full glass-pill text-white hover:bg-sky-500 transition-all active:scale-95"
+                    title="Send Wallpaper to Email"
+                  >
+                    <Icon name="mail" className="w-4 h-4" />
+                  </button>
+
+                  {/* Like Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleLike(wallpaper.id);
+                    }}
+                    className={`p-2 rounded-full glass-pill transition-all active:scale-125 ${
+                      isLiked 
+                        ? 'bg-rose-500/90 text-white' 
+                        : 'text-white hover:bg-white/30'
+                    }`}
+                    title={isLiked ? "Unlike" : "Like"}
+                  >
+                    <Icon 
+                      name="heart" 
+                      className={`w-4 h-4 ${isLiked ? 'fill-current animate-heart-pop' : ''}`} 
+                    />
+                  </button>
+
+                  {/* Direct Download Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onQuickDownload(wallpaper);
+                    }}
+                    className="p-2 rounded-full glass-pill text-white hover:bg-white/30 transition-all active:scale-95"
+                    title="Download Wallpaper"
+                  >
+                    <Icon name="download" className="w-4 h-4" />
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Title */}
+          <div className="p-3">
+            <h3 className="font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-100 line-clamp-1 group-hover:text-brand-500 transition-colors">
+              {wallpaper.title}
+            </h3>
+            <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              <span>{wallpaper.category} • {wallpaper.aspectLabel}</span>
+              <span className="flex items-center gap-1 font-semibold">
+                <Icon name="heart" className="w-3 h-3 text-rose-500" />
+                {wallpaper.likes + (isLiked ? 1 : 0)}
+              </span>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const WallpaperModal = ({ 
+      wallpaper, 
+      onClose, 
+      onSavePin, 
+      isSaved, 
+      savedBoard, 
+      onToggleLike, 
+      isLiked, 
+      onDownload, 
+      onOpenSendEmailModal,
+      userBoards,
+      onSelectTag,
+      allWallpapers,
+      onSelectWallpaper,
+      addToast
+    }) => {
+      const [copiedColor, setCopiedColor] = useState(null);
+      const [isFullscreen, setIsFullscreen] = useState(false);
+      const [selectedBoardOption, setSelectedBoardOption] = useState(savedBoard || userBoards[0] || 'Favorites');
+
+      if (!wallpaper) return null;
+
+      const handleCopyHex = (hex) => {
+        try {
+          const el = document.createElement('textarea');
+          el.value = hex;
+          document.body.appendChild(el);
+          el.select();
+          document.execCommand('copy');
+          document.body.removeChild(el);
+
+          setCopiedColor(hex);
+          addToast({
+            title: 'Color Hex Copied!',
+            message: `${hex} copied to clipboard`,
+            type: 'success',
+            icon: 'palette'
+          });
+          setTimeout(() => setCopiedColor(null), 2000);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      const relatedWallpapers = allWallpapers
+        .filter(item => item.id !== wallpaper.id && (item.category === wallpaper.category || item.tags.some(t => wallpaper.tags.includes(t))))
+        .slice(0, 4);
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-950/80 backdrop-blur-md animate-fade-in overflow-y-auto">
+          <div className="fixed inset-0" onClick={onClose}></div>
+
+          <div className="relative w-full max-w-5xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden z-10 animate-scale-up max-h-[92vh] flex flex-col">
+            
+            {/* Modal Top Nav Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 rounded-full text-xs font-extrabold uppercase bg-brand-500/10 text-brand-500">
+                  {wallpaper.category}
+                </span>
+                <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+                  {wallpaper.resolution} • {wallpaper.aspectLabel}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Send Wallpaper via Email Button */}
+                <button
+                  onClick={() => onOpenSendEmailModal(wallpaper)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-sky-500 text-white text-xs font-bold shadow-md hover:bg-sky-600 transition-colors"
+                >
+                  <Icon name="mail" className="w-3.5 h-3.5" />
+                  <span>Send to Email</span>
+                </button>
+
+                <button
+                  onClick={() => setIsFullscreen(!isFullscreen)}
+                  className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
+                >
+                  <Icon name={isFullscreen ? "minimize-2" : "maximize-2"} className="w-5 h-5" />
+                </button>
+
+                <button
+                  onClick={onClose}
+                  className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
+                >
+                  <Icon name="x" className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="overflow-y-auto p-6 flex-1">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                {/* Main Media Preview */}
+                <div className={`lg:col-span-7 flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-950/60 rounded-2xl p-4 relative group overflow-hidden ${isFullscreen ? 'lg:col-span-12' : ''}`}>
+                  <img
+                    src={wallpaper.imageUrl}
+                    alt={wallpaper.title}
+                    className="max-h-[60vh] sm:max-h-[70vh] w-auto object-contain rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-[1.01]"
+                  />
+                  <div className="absolute bottom-4 left-4 bg-slate-900/80 text-white text-xs px-3 py-1.5 rounded-full backdrop-blur-md flex items-center gap-2 font-medium">
+                    <Icon name="monitor" className="w-3.5 h-3.5" />
+                    <span>{wallpaper.aspectLabel}</span>
+                  </div>
+                </div>
+
+                {/* Info Pane */}
+                {!isFullscreen && (
+                  <div className="lg:col-span-5 flex flex-col justify-between space-y-6">
+                    <div>
+                      {/* Creator */}
+                      <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={wallpaper.creator.avatar}
+                            alt={wallpaper.creator.name}
+                            className="w-11 h-11 rounded-full object-cover ring-2 ring-brand-500/30"
+                          />
+                          <div>
+                            <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                              {wallpaper.creator.name}
+                            </h4>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {wallpaper.creator.handle}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button 
+                          onClick={() => addToast({ title: 'Following Creator', message: `Following ${wallpaper.creator.name}`, type: 'success', icon: 'user-plus' })}
+                          className="px-4 py-1.5 text-xs font-bold rounded-full border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          Follow
+                        </button>
+                      </div>
+
+                      {/* Title & Engagement */}
+                      <div className="mt-4">
+                        <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white leading-tight">
+                          {wallpaper.title}
+                        </h2>
+
+                        <div className="flex items-center gap-6 mt-3 text-sm text-slate-600 dark:text-slate-400">
+                          <div className="flex items-center gap-1.5">
+                            <Icon name="heart" className={`w-4 h-4 ${isLiked ? 'text-rose-500 fill-rose-500' : ''}`} />
+                            <span className="font-semibold">{wallpaper.likes + (isLiked ? 1 : 0)}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Icon name="download" className="w-4 h-4 text-brand-500" />
+                            <span className="font-semibold">{wallpaper.downloads}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Save Board Box */}
+                      <div className="mt-6 p-4 rounded-2xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3">
+                        <div className="flex-1">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                            Save to Collection
+                          </label>
+                          <select
+                            value={selectedBoardOption}
+                            onChange={(e) => setSelectedBoardOption(e.target.value)}
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500"
+                          >
+                            {userBoards.map(board => (
+                              <option key={board} value={board}>{board}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-4">
+                          <button
+                            onClick={() => onSavePin(wallpaper.id, isSaved ? null : selectedBoardOption)}
+                            className={`px-5 py-2.5 rounded-full font-bold text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 ${
+                              isSaved
+                                ? 'bg-slate-800 text-white hover:bg-red-600'
+                                : 'bg-brand-500 hover:bg-brand-600 text-white shadow-brand-500/25'
+                            }`}
+                          >
+                            <Icon name={isSaved ? "check" : "pin"} className="w-4 h-4" />
+                            {isSaved ? 'Saved' : 'Pin It'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Extracted Color Palette */}
+                      <div className="mt-6">
+                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
+                          <Icon name="palette" className="w-3.5 h-3.5" />
+                          Extracted Color Palette
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          {wallpaper.palette.map((hex, index) => (
+                            <button
+                              key={index}
+                              onClick={() => handleCopyHex(hex)}
+                              className="group relative flex-1 h-10 rounded-xl transition-transform hover:scale-110 shadow-sm flex items-center justify-center font-mono text-[10px] font-bold text-white border border-white/10"
+                              style={{ backgroundColor: hex }}
+                              title={`Click to copy ${hex}`}
+                            >
+                              <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 px-1 py-0.5 rounded text-[9px]">
+                                {copiedColor === hex ? 'Copied!' : hex}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Download Buttons */}
+                      <div className="mt-6">
+                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">
+                          Download Resolution
+                        </h3>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            onClick={() => onDownload(wallpaper, '4K Ultra')}
+                            className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-500 hover:text-white dark:hover:bg-brand-500 transition-all text-left border border-slate-200 dark:border-slate-700/60 group"
+                          >
+                            <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-white">4K Original</p>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">3840 x 2160</p>
+                          </button>
+
+                          <button
+                            onClick={() => onDownload(wallpaper, 'Desktop HD')}
+                            className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-500 hover:text-white dark:hover:bg-brand-500 transition-all text-left border border-slate-200 dark:border-slate-700/60 group"
+                          >
+                            <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-white">Desktop HD</p>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">1920 x 1080</p>
+                          </button>
+
+                          <button
+                            onClick={() => onDownload(wallpaper, 'Mobile HD')}
+                            className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-500 hover:text-white dark:hover:bg-brand-500 transition-all text-left border border-slate-200 dark:border-slate-700/60 group"
+                          >
+                            <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-white">Mobile</p>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">1080 x 1920</p>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Tags */}
+                      <div className="mt-6">
+                        <div className="flex flex-wrap gap-1.5">
+                          {wallpaper.tags.map(tag => (
+                            <button
+                              key={tag}
+                              onClick={() => {
+                                onSelectTag(tag);
+                                onClose();
+                              }}
+                              className="px-3 py-1 rounded-full text-xs font-medium bg-slate-200/80 dark:bg-slate-800 hover:bg-brand-500 hover:text-white text-slate-700 dark:text-slate-300 transition-colors"
+                            >
+                              #{tag}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Related Wallpapers */}
+              {relatedWallpapers.length > 0 && (
+                <div className="mt-12 pt-8 border-t border-slate-200 dark:border-slate-800">
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white mb-4">
+                    More Wallpapers Like This
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {relatedWallpapers.map(item => (
+                      <div
+                        key={item.id}
+                        onClick={() => onSelectWallpaper(item)}
+                        className="group relative rounded-xl overflow-hidden aspect-[3/4] bg-slate-800 cursor-pointer shadow-md hover:shadow-xl transition-all"
+                      >
+                        <img
+                          src={item.imageUrl}
+                          alt={item.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2 flex flex-col justify-end">
+                          <p className="text-xs font-bold text-white truncate">{item.title}</p>
+                          <p className="text-[10px] text-slate-300">{item.category}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const SendToEmailModal = ({ wallpaper, isOpen, onClose, addToast, userEmail }) => {
+      const [recipientEmail, setRecipientEmail] = useState('');
+      const [note, setNote] = useState('');
+      const [resolutionChoice, setResolutionChoice] = useState('4K Ultra Original');
+
+      useEffect(() => {
+        if (wallpaper) {
+          setNote(`Check out this stunning ${wallpaper.resolution} wallpaper titled "${wallpaper.title}" on PaperPin 4K!`);
+        }
+      }, [wallpaper]);
+
+      if (!isOpen || !wallpaper) return null;
+
+      const handleSendEmail = (e) => {
+        e.preventDefault();
+        if (!recipientEmail.trim() || !recipientEmail.includes('@')) {
+          addToast({
+            title: 'Invalid Email Address',
+            message: 'Please enter a valid recipient email address.',
+            type: 'error',
+            icon: 'alert-circle'
+          });
+          return;
+        }
+
+        // Trigger visual confetti feedback
+        if (window.confetti) {
+          window.confetti({ particleCount: 70, spread: 60, origin: { y: 0.7 } });
+        }
+
+        // Save email log
+        const emailLog = JSON.parse(localStorage.getItem('paperpin_sent_emails') || '[]');
+        const newLog = {
+          id: Date.now(),
+          to: recipientEmail,
+          from: userEmail || 'user@paperpin.io',
+          wallpaperTitle: wallpaper.title,
+          wallpaperUrl: wallpaper.imageUrl,
+          resolution: resolutionChoice,
+          sentAt: new Date().toLocaleString(),
+          note
+        };
+        localStorage.setItem('paperpin_sent_emails', JSON.stringify([newLog, ...emailLog]));
+
+        addToast({
+          title: 'Wallpaper Email Sent!',
+          message: `High-res wallpaper link dispatched to ${recipientEmail}`,
+          type: 'email',
+          icon: 'send'
+        });
+
+        setRecipientEmail('');
+        onClose();
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+          <div className="fixed inset-0" onClick={onClose}></div>
+
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 z-10 animate-scale-up">
+            
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-sky-500/20 text-sky-500 flex items-center justify-center">
+                  <Icon name="mail" className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                    Send Wallpaper to Email
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Share high-definition link directly via email</p>
+                </div>
+              </div>
+              <button onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
+                <Icon name="x" className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Preview Card */}
+            <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/60 mb-4">
+              <img src={wallpaper.imageUrl} alt={wallpaper.title} className="w-16 h-16 rounded-xl object-cover" />
+              <div className="min-w-0 flex-1">
+                <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">{wallpaper.title}</h4>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">{wallpaper.category} • {wallpaper.resolution}</p>
+                <span className="inline-block mt-1 text-[9px] font-extrabold text-sky-500 uppercase tracking-wider">
+                  Direct Unsplash CDN Link Attached
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSendEmail} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Recipient Email Address
+                </label>
+                <input
+                  type="email"
+                  value={recipientEmail}
+                  onChange={(e) => setRecipientEmail(e.target.value)}
+                  placeholder="friend@example.com or your email"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-semibold focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Wallpaper Resolution Spec
+                </label>
+                <select
+                  value={resolutionChoice}
+                  onChange={(e) => setResolutionChoice(e.target.value)}
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                >
+                  <option value="4K Ultra Original">4K Ultra Original (3840x2160)</option>
+                  <option value="Desktop 1080p">Desktop HD (1920x1080)</option>
+                  <option value="Mobile Vertical">Mobile Vertical (1080x1920)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Personal Message / Note
+                </label>
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  rows="3"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                ></textarea>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs rounded-full shadow-lg shadow-sky-500/25 flex items-center gap-1.5 active:scale-95"
+                >
+                  <Icon name="send" className="w-3.5 h-3.5" />
+                  Dispatch Email
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      );
+    };
+
+    const EmailBoardsModal = ({ isOpen, onClose, savedItems, userEmail, addToast }) => {
+      const [emailInput, setEmailInput] = useState(userEmail || '');
+
+      if (!isOpen) return null;
+
+      const handleSendBoardEmail = (e) => {
+        e.preventDefault();
+        if (!emailInput.trim() || !emailInput.includes('@')) {
+          addToast({ title: 'Invalid Email', message: 'Please provide a valid email.', type: 'error' });
+          return;
+        }
+
+        if (window.confetti) {
+          window.confetti({ particleCount: 90, spread: 70, origin: { y: 0.6 } });
+        }
+
+        addToast({
+          title: 'Boards Exported to Email!',
+          message: `Digest containing ${savedItems.length} wallpapers sent to ${emailInput}`,
+          type: 'email',
+          icon: 'mail'
+        });
+
+        onClose();
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+          <div className="fixed inset-0" onClick={onClose}></div>
+
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 z-10 animate-scale-up">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-4">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <Icon name="mail" className="w-5 h-5 text-brand-500" />
+                Email My Saved Boards
+              </h3>
+              <button onClick={onClose} className="p-1 text-slate-400">
+                <Icon name="x" className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+              Export a complete visual digest of your <strong>{savedItems.length} saved wallpapers</strong> directly to your email inbox.
+            </p>
+
+            <form onSubmit={handleSendBoardEmail} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Destination Email Address
+                </label>
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  placeholder="your.email@example.com"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="p-3 bg-brand-500/10 rounded-2xl border border-brand-500/20 text-xs text-brand-500 font-medium">
+                ✨ Includes direct 4K download links, creator credits, and color palette swatches!
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-xs font-bold text-slate-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs rounded-full shadow-lg shadow-brand-500/25 flex items-center gap-1.5"
+                >
+                  <Icon name="send" className="w-3.5 h-3.5" />
+                  Email My Boards
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    };
+
+    const NewsletterModal = ({ isOpen, onClose, addToast, userEmail, setUserEmail }) => {
+      const [email, setEmail] = useState(userEmail || '');
+      const [topics, setTopics] = useState(['Cyberpunk', '4K Ultra', 'AMOLED', 'Nature']);
+
+      if (!isOpen) return null;
+
+      const toggleTopic = (cat) => {
+        setTopics(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
+      };
+
+      const handleSubscribe = (e) => {
+        e.preventDefault();
+        if (!email.trim() || !email.includes('@')) {
+          addToast({ title: 'Invalid Email', message: 'Enter a valid email address.', type: 'error' });
+          return;
+        }
+
+        setUserEmail(email.trim());
+        const subs = JSON.parse(localStorage.getItem('paperpin_subscribers') || '[]');
+        localStorage.setItem('paperpin_subscribers', JSON.stringify([...new Set([...subs, email.trim()])]));
+
+        if (window.confetti) {
+          window.confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
+        }
+
+        addToast({
+          title: 'Daily Digest Subscribed!',
+          message: `Top ${topics.join(', ')} wallpapers will be emailed daily to ${email}`,
+          type: 'success',
+          icon: 'check-circle'
+        });
+
+        onClose();
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+          <div className="fixed inset-0" onClick={onClose}></div>
+
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 z-10 animate-scale-up">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center">
+                  <Icon name="bell" className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Daily 4K Wallpaper Digest</h3>
+                  <p className="text-[11px] text-slate-400">Receive top trending wallpapers directly in your inbox</p>
+                </div>
+              </div>
+              <button onClick={onClose} className="p-1.5 text-slate-400">
+                <Icon name="x" className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubscribe} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Your Email Address
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="alex.design@example.com"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Select Preferred Wallpaper Topics
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {CATEGORIES.filter(c => c !== 'All').map(cat => {
+                    const active = topics.includes(cat);
+                    return (
+                      <button
+                        type="button"
+                        key={cat}
+                        onClick={() => toggleTopic(cat)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1 ${
+                          active 
+                            ? 'bg-amber-500 text-white' 
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        {active && <Icon name="check" className="w-3 h-3" />}
+                        {cat}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-bold text-slate-500">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-full shadow-lg shadow-amber-500/25 flex items-center gap-1.5"
+                >
+                  <Icon name="bell" className="w-3.5 h-3.5" />
+                  Subscribe Free
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    };
+
+    const UploadModal = ({ isOpen, onClose, onAddWallpaper, categories, addToast }) => {
+      const [title, setTitle] = useState('');
+      const [category, setCategory] = useState('Cyberpunk');
+      const [resolution, setResolution] = useState('4K Ultra');
+      const [aspectRatio, setAspectRatio] = useState('tall');
+      const [imageUrl, setImageUrl] = useState('');
+      const [tags, setTags] = useState('');
+      const [previewUrl, setPreviewUrl] = useState('');
+      const fileInputRef = useRef(null);
+
+      if (!isOpen) return null;
+
+      const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setPreviewUrl(reader.result);
+            setImageUrl(reader.result);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        const finalUrl = previewUrl || imageUrl;
+
+        if (!title.trim() || !finalUrl) {
+          addToast({ title: 'Incomplete Form', message: 'Provide title and image source.', type: 'error' });
+          return;
+        }
+
+        const newPin = {
+          id: 'custom-' + Date.now(),
+          title: title.trim(),
+          category,
+          resolution,
+          aspectRatio,
+          aspectLabel: aspectRatio === 'tall' ? '9:16 Mobile' : aspectRatio === 'square' ? '1:1 Square' : '16:9 Desktop',
+          imageUrl: finalUrl,
+          creator: {
+            name: 'You (Creator)',
+            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
+            handle: '@you'
+          },
+          likes: 1,
+          downloads: 0,
+          createdAt: new Date().toISOString().split('T')[0],
+          palette: ['#0f172a', '#e60023', '#3b82f6', '#10b981'],
+          tags: tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
+        };
+
+        onAddWallpaper(newPin);
+        addToast({ title: 'Wallpaper Uploaded!', message: 'Pin published tofeed', type: 'success', icon: 'check-circle' });
+
+        setTitle('');
+        setImageUrl('');
+        setPreviewUrl('');
+        setTags('');
+        onClose();
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+          <div className="fixed inset-0" onClick={onClose}></div>
+
+          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 z-10 animate-scale-up max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 mb-6">
+              <h3 className="text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <Icon name="upload-cloud" className="w-5 h-5 text-brand-500" />
+                Upload Wallpaper Pin
+              </h3>
+              <button onClick={onClose} className="p-1 text-slate-400">
+                <Icon name="x" className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-2">Image Source</label>
+                {previewUrl ? (
+                  <div className="relative rounded-2xl overflow-hidden max-h-56 bg-slate-950 flex items-center justify-center border border-slate-700">
+                    <img src={previewUrl} alt="Preview" className="max-h-56 object-contain" />
+                    <button
+                      type="button"
+                      onClick={() => { setPreviewUrl(''); setImageUrl(''); }}
+                      className="absolute top-3 right-3 bg-red-600 text-white p-1.5 rounded-full shadow-lg"
+                    >
+                      <Icon name="trash-2" className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-brand-500 rounded-2xl p-6 text-center cursor-pointer transition-colors flex flex-col items-center justify-center"
+                    >
+                      <Icon name="image" className="w-8 h-8 text-slate-400 mb-2" />
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Choose Image File</p>
+                      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+                    </div>
+
+                    <div className="flex flex-col justify-center">
+                      <span className="text-xs text-slate-400 text-center mb-2 font-bold">— OR —</span>
+                      <input
+                        type="url"
+                        value={imageUrl}
+                        onChange={(e) => { setImageUrl(e.target.value); setPreviewUrl(e.target.value); }}
+                        placeholder="Paste image web URL..."
+                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Title</label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Cyberpunk City Neon Rain 4K"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Category</label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs font-semibold"
+                  >
+                    {categories.filter(c => c !== 'All').map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Resolution</label>
+                  <select
+                    value={resolution}
+                    onChange={(e) => setResolution(e.target.value)}
+                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs font-semibold"
+                  >
+                    <option value="4K Ultra">4K Ultra</option>
+                    <option value="8K Ultra">8K Ultra</option>
+                    <option value="4K OLED">4K OLED</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Aspect Ratio</label>
+                  <select
+                    value={aspectRatio}
+                    onChange={(e) => setAspectRatio(e.target.value)}
+                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs font-semibold"
+                  >
+                    <option value="tall">Mobile 9:16</option>
+                    <option value="wide">Desktop 16:9</option>
+                    <option value="square">Square 1:1</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-bold text-slate-500">Cancel</button>
+                <button type="submit" className="px-5 py-2.5 bg-brand-500 text-white font-bold text-xs rounded-full shadow-lg">Publish Pin</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    };
+
+    const SavedPinsView = ({ 
+      savedPins, 
+      wallpapers, 
+      userBoards, 
+      onCreateBoard, 
+      onSelectWallpaper,
+      onSavePin,
+      onToggleLike,
+      likedIds,
+      onQuickDownload,
+      onOpenSendEmailModal,
+      onOpenEmailBoardsModal
+    }) => {
+      const [activeBoardFilter, setActiveBoardFilter] = useState('All');
+      const [newBoardName, setNewBoardName] = useState('');
+      const [showNewBoardInput, setShowNewBoardInput] = useState(false);
+
+      const savedItems = wallpapers.filter(w => savedPins[w.id]);
+      const filteredSavedItems = activeBoardFilter === 'All' 
+        ? savedItems 
+        : savedItems.filter(w => savedPins[w.id] === activeBoardFilter);
+
+      const handleAddBoardSubmit = (e) => {
+        e.preventDefault();
+        if (newBoardName.trim()) {
+          onCreateBoard(newBoardName.trim());
+          setActiveBoardFilter(newBoardName.trim());
+          setNewBoardName('');
+          setShowNewBoardInput(false);
+        }
+      };
+
+      return (
+        <div className="max-w-[1700px] mx-auto px-4 sm:px-6 py-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <Icon name="bookmark" className="w-7 h-7 text-brand-500 fill-brand-500" />
+                Your Pin Collections
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                {savedItems.length} wallpapers saved in {userBoards.length} custom boards
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onOpenEmailBoardsModal}
+                className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white text-xs font-bold rounded-full shadow-md flex items-center gap-1.5 transition-transform active:scale-95"
+              >
+                <Icon name="mail" className="w-4 h-4" />
+                Email My Boards
+              </button>
+
+              <button
+                onClick={() => setShowNewBoardInput(!showNewBoardInput)}
+                className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold rounded-full shadow-md flex items-center gap-1.5 transition-transform active:scale-95"
+              >
+                <Icon name="folder-plus" className="w-4 h-4" />
+                Create Board
+              </button>
+            </div>
+          </div>
+
+          {showNewBoardInput && (
+            <form onSubmit={handleAddBoardSubmit} className="mb-6 p-4 bg-slate-200/60 dark:bg-slate-800/80 rounded-2xl flex items-center gap-2 max-w-md animate-fade-in">
+              <input
+                type="text"
+                value={newBoardName}
+                onChange={(e) => setNewBoardName(e.target.value)}
+                placeholder="Board name (e.g. AMOLED Cyberpunk)..."
+                className="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
+                autoFocus
+              />
+              <button type="submit" className="bg-brand-500 text-white font-bold text-xs px-4 py-2 rounded-xl">Create</button>
+              <button type="button" onClick={() => setShowNewBoardInput(false)} className="text-slate-400 p-2"><Icon name="x" className="w-4 h-4" /></button>
+            </form>
+          )}
+
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-4 mb-6 border-b border-slate-200 dark:border-slate-800">
+            <button
+              onClick={() => setActiveBoardFilter('All')}
+              className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
+                activeBoardFilter === 'All' ? 'bg-brand-500 text-white' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              All Pins ({savedItems.length})
+            </button>
+            {userBoards.map(board => {
+              const count = savedItems.filter(w => savedPins[w.id] === board).length;
+              return (
+                <button
+                  key={board}
+                  onClick={() => setActiveBoardFilter(board)}
+                  className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
+                    activeBoardFilter === board ? 'bg-brand-500 text-white' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  {board} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          {filteredSavedItems.length === 0 ? (
+            <div className="text-center py-20 bg-slate-100/50 dark:bg-slate-900/30 rounded-3xl border border-dashed border-slate-300 dark:border-slate-800">
+              <Icon name="pin" className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">No Wallpapers Saved in this Board</h3>
+              <p className="text-xs text-slate-400 mt-1">Explore 4K wallpapers and click "Save" to populate this collection.</p>
+            </div>
+          ) : (
+            <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 xl:columns-5 masonry-columns">
+              {filteredSavedItems.map(wallpaper => (
+                <WallpaperCard
+                  key={wallpaper.id}
+                  wallpaper={wallpaper}
+                  onSelect={onSelectWallpaper}
+                  onSavePin={onSavePin}
+                  isSaved={true}
+                  savedBoard={savedPins[wallpaper.id]}
+                  onToggleLike={onToggleLike}
+                  isLiked={likedIds.has(wallpaper.id)}
+                  onQuickDownload={onQuickDownload}
+                  onOpenSendEmailModal={onOpenSendEmailModal}
+                  userBoards={userBoards}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const EmailHubView = ({ userEmail, setUserEmail, onOpenNewsletterModal, addToast }) => {
+      const [sentLogs, setSentLogs] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('paperpin_sent_emails') || '[]'); } catch(e) { return []; }
+      });
+
+      const clearLogs = () => {
+        localStorage.removeItem('paperpin_sent_emails');
+        setSentLogs([]);
+        addToast({ title: 'Logs Cleared', message: 'Sent email history reset.', type: 'info' });
+      };
+
+      return (
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <div className="p-6 sm:p-8 rounded-3xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl mb-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-sky-500/20 text-sky-500 flex items-center justify-center">
+                  <Icon name="mail" className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Email Address Center</h2>
+                  <p className="text-xs text-slate-400">Manage email subscriptions, dispatched wallpapers, and board exports</p>
+                </div>
+              </div>
+
+              <button
+                onClick={onOpenNewsletterModal}
+                className="px-4 py-2 bg-amber-500 text-white font-bold text-xs rounded-full shadow-md flex items-center gap-1.5"
+              >
+                <Icon name="bell" className="w-3.5 h-3.5" />
+                Daily Digest Settings
+              </button>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60">
+                <p className="text-[10px] font-extrabold uppercase text-slate-400 mb-1">Active Email Profile</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">{userEmail || 'Not Signed In'}</p>
+                <p className="text-[11px] text-slate-400 mt-2">Used for board exports and subscription digests.</p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60">
+                <p className="text-[10px] font-extrabold uppercase text-slate-400 mb-1">Total Wallpapers Email Sent</p>
+                <p className="text-xl font-extrabold text-sky-500">{sentLogs.length}</p>
+                <p className="text-[11px] text-slate-400 mt-1">Direct wallpaper emails dispatched.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Sent History Log Table */}
+          <div className="p-6 rounded-3xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <Icon name="inbox" className="w-4 h-4 text-sky-500" />
+                Sent Wallpapers History Log
+              </h3>
+              {sentLogs.length > 0 && (
+                <button onClick={clearLogs} className="text-xs font-bold text-rose-500 hover:underline">Clear History</button>
+              )}
+            </div>
+
+            {sentLogs.length === 0 ? (
+              <div className="text-center py-10 text-slate-400 text-xs">
+                No emails dispatched yet. Click "Send to Email" on any wallpaper to send high-res links!
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sentLogs.map((log) => (
+                  <div key={log.id} className="p-3.5 rounded-2xl bg-white dark:bg-slate-800 flex items-center justify-between gap-3 border border-slate-200 dark:border-slate-700/60">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <img src={log.wallpaperUrl} alt={log.wallpaperTitle} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{log.wallpaperTitle}</p>
+                        <p className="text-[10px] text-slate-400">To: <span className="text-sky-400">{log.to}</span> • {log.sentAt}</p>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full bg-sky-500/10 text-sky-500 text-[10px] font-extrabold shrink-0">
+                      {log.resolution}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    const App = () => {
+      // Wallpapers State
+      const [wallpapers, setWallpapers] = useState(() => {
+        const custom = localStorage.getItem('paperpin_custom_wallpapers');
+        const customParsed = custom ? JSON.parse(custom) : [];
+        const seedMapped = UNSPLASH_PHOTO_SEED.map(item => ({
+          ...item,
+          imageUrl: getUnsplashUrl(item.id, 900, 85),
+          creator: {
+            name: 'PaperPin Studio',
+            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
+            handle: '@paperpin_4k'
+          },
+          likes: Math.floor(1800 + Math.random() * 2000),
+          downloads: Math.floor(1100 + Math.random() * 1500),
+          createdAt: '2026-09-20'
+        }));
+        return [...customParsed, ...seedMapped];
+      });
+
+      // User Account & Email State
+      const [userEmail, setUserEmail] = useState(() => localStorage.getItem('paperpin_user_email') || 'alex.design@paperpin.io');
+
+      // LocalStorage Persisted States
+      const [savedPins, setSavedPins] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('paperpin_saved_pins')) || { 'pin-1': 'Favorites' }; } catch(e) { return {}; }
+      });
+
+      const [userBoards, setUserBoards] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('paperpin_boards')) || INITIAL_BOARDS; } catch(e) { return INITIAL_BOARDS; }
+      });
+
+      const [likedIds, setLikedIds] = useState(() => {
+        try { return new Set(JSON.parse(localStorage.getItem('paperpin_likes'))); } catch(e) { return new Set(); }
+      });
+
+      const [darkMode, setDarkMode] = useState(() => {
+        const saved = localStorage.getItem('paperpin_theme');
+        return saved ? saved === 'dark' : true;
+      });
+
+      // UI States
+      const [activeTab, setActiveTab] = useState('explore'); // 'explore', 'trending', 'saved', 'email-hub'
+      const [selectedCategory, setSelectedCategory] = useState('All');
+      const [selectedAspect, setSelectedAspect] = useState('all');
+      const [selectedPalette, setSelectedPalette] = useState(null);
+      const [searchQuery, setSearchQuery] = useState('');
+      
+      // Modals
+      const [selectedWallpaper, setSelectedWallpaper] = useState(null);
+      const [sendEmailWallpaper, setSendEmailWallpaper] = useState(null);
+      const [isUploadOpen, setIsUploadOpen] = useState(false);
+      const [isNewsletterOpen, setIsNewsletterOpen] = useState(false);
+      const [isEmailBoardsOpen, setIsEmailBoardsOpen] = useState(false);
+      const [isAccountOpen, setIsAccountOpen] = useState(false);
+      const [toasts, setToasts] = useState([]);
+
+      // Sync dark mode HTML class
+      useEffect(() => {
+        const root = document.documentElement;
+        if (darkMode) {
+          root.classList.add('dark');
+          localStorage.setItem('paperpin_theme', 'dark');
+        } else {
+          root.classList.remove('dark');
+          localStorage.setItem('paperpin_theme', 'light');
+        }
+      }, [darkMode]);
+
+      useEffect(() => { localStorage.setItem('paperpin_saved_pins', JSON.stringify(savedPins)); }, [savedPins]);
+      useEffect(() => { localStorage.setItem('paperpin_boards', JSON.stringify(userBoards)); }, [userBoards]);
+      useEffect(() => { localStorage.setItem('paperpin_likes', JSON.stringify(Array.from(likedIds))); }, [likedIds]);
+      useEffect(() => { localStorage.setItem('paperpin_user_email', userEmail); }, [userEmail]);
+
+      const addToast = ({ title, message, type = 'info', icon = 'info' }) => {
+        const id = Date.now() + Math.random();
+        setToasts(prev => [...prev, { id, title, message, type, icon }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3800);
+      };
+
+      const removeToast = (id) => setToasts(prev => prev.filter(t => t.id !== id));
+
+      const handleSavePin = (wallpaperId, boardName) => {
+        setSavedPins(prev => {
+          const updated = { ...prev };
+          if (boardName === null) {
+            delete updated[wallpaperId];
+            addToast({ title: 'Unpinned', message: 'Removed from board', type: 'info', icon: 'bookmark' });
+          } else {
+            updated[wallpaperId] = boardName;
+            addToast({ title: `Saved to ${boardName}`, message: 'Pinned to board collection', type: 'success', icon: 'pin' });
+          }
+          return updated;
+        });
+      };
+
+      const handleToggleLike = (wallpaperId) => {
+        setLikedIds(prev => {
+          const next = new Set(prev);
+          if (next.has(wallpaperId)) next.delete(wallpaperId);
+          else {
+            next.add(wallpaperId);
+            addToast({ title: 'Liked Pin!', message: 'Added to favorites', type: 'success', icon: 'heart' });
+          }
+          return next;
+        });
+      };
+
+      const handleDownload = (wallpaper, resLabel = '4K Ultra') => {
+        addToast({ title: `Downloading ${wallpaper.title}`, message: `Preparing high-res ${resLabel}...`, type: 'success', icon: 'download' });
+        setWallpapers(prev => prev.map(w => w.id === wallpaper.id ? { ...w, downloads: w.downloads + 1 } : w));
+        const a = document.createElement('a');
+        a.href = wallpaper.imageUrl;
+        a.download = `PaperPin_${wallpaper.title.replace(/\s+/g, '_')}_${resLabel}.jpg`;
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      };
+
+      const handleAddWallpaper = (newPin) => {
+        const customPins = JSON.parse(localStorage.getItem('paperpin_custom_wallpapers') || '[]');
+        localStorage.setItem('paperpin_custom_wallpapers', JSON.stringify([newPin, ...customPins]));
+        setWallpapers(prev => [newPin, ...prev]);
+      };
+
+      const handleCreateBoard = (boardName) => {
+        if (!userBoards.includes(boardName)) {
+          setUserBoards(prev => [...prev, boardName]);
+          addToast({ title: 'Board Created', message: `Created "${boardName}"`, type: 'success', icon: 'folder-plus' });
+        }
+      };
+
+      // Filtered wallpapers including dynamic query search engine
+      const displayedWallpapers = useMemo(() => {
+        let list = [...wallpapers];
+
+        // If user typed a search query that returns 0 items in static pool, dynamically construct high-res dynamic wallpapers!
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase().trim();
+          let filtered = list.filter(item => 
+            item.title.toLowerCase().includes(q) ||
+            item.category.toLowerCase().includes(q) ||
+            item.creator.name.toLowerCase().includes(q) ||
+            item.tags.some(tag => tag.toLowerCase().includes(q))
+          );
+
+          if (filtered.length < 4) {
+            const dynamicGenerated = generateDynamicWallpapersForQuery(q, 10);
+            filtered = [...filtered, ...dynamicGenerated];
+          }
+          list = filtered;
+        }
+
+        if (activeTab === 'trending') {
+          list.sort((a, b) => b.likes - a.likes);
+        }
+
+        if (selectedCategory !== 'All') {
+          list = list.filter(item => item.category.toLowerCase() === selectedCategory.toLowerCase());
+        }
+
+        if (selectedAspect !== 'all') {
+          list = list.filter(item => item.aspectRatio === selectedAspect);
+        }
+
+        return list;
+      }, [wallpapers, activeTab, selectedCategory, selectedAspect, searchQuery]);
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          <Navbar
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            onOpenUpload={() => setIsUploadOpen(true)}
+            onOpenAccountModal={() => setIsAccountOpen(true)}
+            onOpenNewsletterModal={() => setIsNewsletterOpen(true)}
+            darkMode={darkMode}
+            setDarkMode={setDarkMode}
+            savedCount={Object.keys(savedPins).length}
+            userEmail={userEmail}
+          />
+
+          <main className="flex-1">
+            {activeTab === 'email-hub' ? (
+              <EmailHubView
+                userEmail={userEmail}
+                setUserEmail={setUserEmail}
+                onOpenNewsletterModal={() => setIsNewsletterOpen(true)}
+                addToast={addToast}
+              />
+            ) : activeTab === 'saved' ? (
+              <SavedPinsView
+                savedPins={savedPins}
+                wallpapers={wallpapers}
+                userBoards={userBoards}
+                onCreateBoard={handleCreateBoard}
+                onSelectWallpaper={setSelectedWallpaper}
+                onSavePin={handleSavePin}
+                onToggleLike={handleToggleLike}
+                likedIds={likedIds}
+                onQuickDownload={handleDownload}
+                onOpenSendEmailModal={(wp) => setSendEmailWallpaper(wp)}
+                onOpenEmailBoardsModal={() => setIsEmailBoardsOpen(true)}
+              />
+            ) : (
+              <div>
+                <CategoryAndFilterBar
+                  categories={CATEGORIES}
+                  selectedCategory={selectedCategory}
+                  setSelectedCategory={setSelectedCategory}
+                  selectedAspect={selectedAspect}
+                  setSelectedAspect={setSelectedAspect}
+                  selectedPalette={selectedPalette}
+                  setSelectedPalette={setSelectedPalette}
+                />
+
+                <div className="max-w-[1700px] mx-auto px-4 sm:px-6 my-6">
+                  <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 xl:columns-5 masonry-columns">
+                    {displayedWallpapers.map(wallpaper => (
+                      <WallpaperCard
+                        key={wallpaper.id}
+                        wallpaper={wallpaper}
+                        onSelect={setSelectedWallpaper}
+                        onSavePin={handleSavePin}
+                        isSaved={!!savedPins[wallpaper.id]}
+                        savedBoard={savedPins[wallpaper.id]}
+                        onToggleLike={handleToggleLike}
+                        isLiked={likedIds.has(wallpaper.id)}
+                        onQuickDownload={handleDownload}
+                        onOpenSendEmailModal={(wp) => setSendEmailWallpaper(wp)}
+                        userBoards={userBoards}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+
+          {/* Account Modal */}
+          {isAccountOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+              <div className="fixed inset-0" onClick={() => setIsAccountOpen(false)}></div>
+              <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 z-10 animate-scale-up">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-4">
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Email Profile Settings</h3>
+                  <button onClick={() => setIsAccountOpen(false)} className="p-1 text-slate-400"><Icon name="x" className="w-5 h-5" /></button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Your Email Address</label>
+                    <input
+                      type="email"
+                      value={userEmail}
+                      onChange={(e) => setUserEmail(e.target.value)}
+                      placeholder="email@example.com"
+                      className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      addToast({ title: 'Email Updated', message: `Saved email as ${userEmail}`, type: 'success' });
+                      setIsAccountOpen(false);
+                    }}
+                    className="w-full py-2.5 bg-brand-500 text-white font-bold text-xs rounded-full shadow-lg"
+                  >
+                    Save Email Account
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modals */}
+          {selectedWallpaper && (
+            <WallpaperModal
+              wallpaper={selectedWallpaper}
+              onClose={() => setSelectedWallpaper(null)}
+              onSavePin={handleSavePin}
+              isSaved={!!savedPins[selectedWallpaper.id]}
+              savedBoard={savedPins[selectedWallpaper.id]}
+              onToggleLike={handleToggleLike}
+              isLiked={likedIds.has(selectedWallpaper.id)}
+              onDownload={handleDownload}
+              onOpenSendEmailModal={(wp) => setSendEmailWallpaper(wp)}
+              userBoards={userBoards}
+              onSelectTag={(tag) => { setSearchQuery(tag); setActiveTab('explore'); }}
+              allWallpapers={wallpapers}
+              onSelectWallpaper={setSelectedWallpaper}
+              addToast={addToast}
+            />
+          )}
+
+          <SendToEmailModal
+            wallpaper={sendEmailWallpaper}
+            isOpen={!!sendEmailWallpaper}
+            onClose={() => setSendEmailWallpaper(null)}
+            addToast={addToast}
+            userEmail={userEmail}
+          />
+
+          <EmailBoardsModal
+            isOpen={isEmailBoardsOpen}
+            onClose={() => setIsEmailBoardsOpen(false)}
+            savedItems={wallpapers.filter(w => savedPins[w.id])}
+            userEmail={userEmail}
+            addToast={addToast}
+          />
+
+          <NewsletterModal
+            isOpen={isNewsletterOpen}
+            onClose={() => setIsNewsletterOpen(false)}
+            addToast={addToast}
+            userEmail={userEmail}
+            setUserEmail={setUserEmail}
+          />
+
+          <UploadModal
+            isOpen={isUploadOpen}
+            onClose={() => setIsUploadOpen(false)}
+            onAddWallpaper={handleAddWallpaper}
+            categories={CATEGORIES}
+            addToast={addToast}
+          />
+
+          <ToastContainer toasts={toasts} removeToast={removeToast} />
+        </div>
+      );
+    };
+
+    const rootElement = document.getElementById('root');
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(<App />);
+
+  </script>
+</body>
+</html>
